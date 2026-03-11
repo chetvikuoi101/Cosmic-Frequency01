@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (matches request.auth.uid)
+    // Fields:
+    //   - uid: string (required) - Firebase Auth UID
+    //   - email: string (required) - User email
+    //   - displayName: string (optional) - User display name
+    //   - photoURL: string (optional) - User photo URL
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // Collection: readings
+    // Document ID: auto-generated
+    // Fields:
+    //   - uid: string (required) - Owner's UID
+    //   - question: string (optional) - User's question
+    //   - cards: list (required) - Array of card objects
+    //   - interpretation: string (required) - AI response
+    //   - language: string (required) - Response language
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "chetvikuoi101@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // Domain Validators
+    
+    function isValidUser(data) {
+      return data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'role']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             (data.createdAt == request.time || data.createdAt is timestamp);
+    }
+
+    function isValidReading(data) {
+      return data.keys().hasOnly(['uid', 'question', 'cards', 'interpretation', 'language', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.cards is list && data.cards.size() > 0 && data.cards.size() <= 10 &&
+             data.interpretation is string && data.interpretation.size() < 10000 &&
+             data.language is string && data.language.size() <= 10 &&
+             data.createdAt == request.time;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && (!('role' in request.resource.data) || isAdmin());
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /readings/{readingId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidReading(request.resource.data);
+      allow update: if false; // Readings are immutable
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

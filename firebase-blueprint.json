@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Information about the authenticated user",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Reading": {
+      "title": "Oracle Reading",
+      "description": "A saved oracle card reading session",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Owner's UID" },
+        "question": { "type": "string" },
+        "cards": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "interpretation": { "type": "string" },
+        "language": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "cards", "interpretation", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "readings/{readingId}": {
+      "schema": "Reading",
+      "description": "Collection of oracle readings"
+    }
+  }
+}
